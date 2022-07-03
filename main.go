@@ -2,11 +2,47 @@ package main
 
 import (
 	"fmt"
+	"log"
+	"net/http"
+	"strings"
 
+	"github.com/PuerkitoBio/goquery"
 	"github.com/theognis1002/go-rotten-tomatoes/models"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
+
+func checkRottenTomatoScores() {
+	const RottenTomatoUrl = "https://www.rottentomatoes.com/browse/movies_in_theaters/sort:newest?page=1"
+
+	// Request the HTML page.
+	res, err := http.Get(RottenTomatoUrl)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != 200 {
+		log.Fatalf("status code error: %d %s", res.StatusCode, res.Status)
+	}
+
+	// Load the HTML document
+	doc, err := goquery.NewDocumentFromReader(res.Body)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// Find the review items
+	doc.Find("div .discovery-tiles score-pairs").Each(func(i int, s *goquery.Selection) {
+		// For each item found, get the criticScore
+		movieTitle := strings.TrimSpace(s.Next().Text())
+		criticScore := s.AttrOr("criticsscore", "-")
+		criticSentiment := s.AttrOr("criticsentiment", "-")
+		// audienceScore := s.AttrOr("audiencescore", "-")
+		// audienceSentiment := s.AttrOr("audiencesentiment", "-")
+
+		fmt.Printf("[%d] %s - Score: %s%% Sentiment: %s\n", i+1, movieTitle, criticScore, criticSentiment)
+	})
+}
 
 func main() {
 	db, err := gorm.Open(sqlite.Open("test.db"), &gorm.Config{})
@@ -35,4 +71,5 @@ func main() {
 
 	// // Delete - delete movie
 	// db.Delete(&movie, 1)
+	// checkRottenTomatoScores()
 }
