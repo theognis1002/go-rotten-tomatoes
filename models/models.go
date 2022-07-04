@@ -7,5 +7,9 @@ import (
 type Movie struct {
 	gorm.Model
 	Title             string
-	RottenTomatoScore uint
+	CriticScore 	  int
+	CriticSentiment   int
+	AudienceScore 	  int
+	AudienceSentiment int
+	IsEmailSent 	  bool
 }

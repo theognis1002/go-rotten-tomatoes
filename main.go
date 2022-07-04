@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/PuerkitoBio/goquery"
@@ -12,11 +13,22 @@ import (
 	"gorm.io/gorm"
 )
 
+func databaseInit() (db *gorm.DB) {
+	db, err := gorm.Open(sqlite.Open("test.db"), &gorm.Config{})
+	if err != nil {
+		panic("failed to connect database")
+	}
+
+	// Migrate the schema
+	db.AutoMigrate(&models.Movie{})
+	return db
+}
+
 func checkRottenTomatoScores() {
-	const RottenTomatoUrl = "https://www.rottentomatoes.com/browse/movies_in_theaters/sort:newest?page=1"
+	const rottenTomatoUrl = "https://www.rottentomatoes.com/browse/movies_in_theaters/critics:certified_fresh~sort:popular?page=1"
 
 	// Request the HTML page.
-	res, err := http.Get(RottenTomatoUrl)
+	res, err := http.Get(rottenTomatoUrl)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -31,30 +43,58 @@ func checkRottenTomatoScores() {
 		log.Fatal(err)
 	}
 
+	db := databaseInit()
 	// Find the review items
 	doc.Find("div .discovery-tiles score-pairs").Each(func(i int, s *goquery.Selection) {
 		// For each item found, get the criticScore
 		movieTitle := strings.TrimSpace(s.Next().Text())
-		criticScore := s.AttrOr("criticsscore", "-")
-		criticSentiment := s.AttrOr("criticsentiment", "-")
-		// audienceScore := s.AttrOr("audiencescore", "-")
-		// audienceSentiment := s.AttrOr("audiencesentiment", "-")
+		criticScore, _ := strconv.Atoi(s.AttrOr("criticsscore", "-"))
+		criticSentiment, _ := strconv.Atoi(s.AttrOr("criticsentiment", "-"))
+		audienceScore, _ := strconv.Atoi(s.AttrOr("audiencescore", "-"))
+		audienceSentiment, _ := strconv.Atoi(s.AttrOr("audiencesentiment", "-"))
 
-		fmt.Printf("[%d] %s - Score: %s%% Sentiment: %s\n", i+1, movieTitle, criticScore, criticSentiment)
+		movie := models.Movie{Title: movieTitle, CriticScore: criticScore, CriticSentiment: criticSentiment, AudienceScore: audienceScore, AudienceSentiment: audienceSentiment}
+		if db.Model(&movie).Where("title = ?", movieTitle).Updates(&movie).RowsAffected == 0 {
+			db.Create(&movie)
+		}
+		fmt.Printf("[%d] %s - Score: %d%% Sentiment: %d\n", i+1, movieTitle, criticScore, criticSentiment)
+	})
+}
+
+func checkAmcTheatreNowPlaying() {
+	const amcTheatreUrl = "https://www.amctheatres.com/movies"
+	// Request the HTML page.
+	res, err := http.Get(amcTheatreUrl)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != 200 {
+		log.Fatalf("status code error: %d %s", res.StatusCode, res.Status)
+	}
+
+	// Load the HTML document
+	doc, err := goquery.NewDocumentFromReader(res.Body)
+	if err != nil {
+		log.Fatal(err)
+	}
+	
+	// Find the review items
+	doc.Find("div .PosterContent h3").Each(func(i int, s *goquery.Selection) {
+		// For each item found, get the criticScore
+		movieTitle := strings.TrimSpace(s.Text())
+		fmt.Printf("[%d] %s\n", i+1, movieTitle)
 	})
 }
 
 func main() {
-	db, err := gorm.Open(sqlite.Open("test.db"), &gorm.Config{})
-	if err != nil {
-		panic("failed to connect database")
-	}
+	db := databaseInit()
 
 	// Migrate the schema
 	db.AutoMigrate(&models.Movie{})
 
 	// Create
-	db.Create(&models.Movie{Title: "D42", RottenTomatoScore: 100})
+	// db.Create(&models.Movie{Title: "D42", RottenTomatoScore: 100})
 
 	// Read
 	var movie models.Movie
@@ -63,13 +103,17 @@ func main() {
 	db.First(&movie, "title = ?", "D42") // find movie with code D42
 
 	db.Find(&movies)
+	fmt.Println(movie)
 	fmt.Println(movies)
-	// // Update - update movie's RottenTomatoScore to 200
+
+	// Update - update movie's RottenTomatoScore to 200
 	// db.Model(&movie).Update("RottenTomatoScore", 200)
-	// // Update - update multiple fields
+	// Update - update multiple fields
 	// db.Model(&movie).Updates(models.Movie{RottenTomatoScore: 200}) // non-zero fields
 
-	// // Delete - delete movie
+	// Delete - delete movie
 	// db.Delete(&movie, 1)
-	// checkRottenTomatoScores()
+
+	checkRottenTomatoScores()
+	// checkAmcTheatreNowPlaying()
 }
