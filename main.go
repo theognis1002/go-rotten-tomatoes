@@ -4,14 +4,27 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 
 	"github.com/PuerkitoBio/goquery"
+	"github.com/joho/godotenv"
 	"github.com/theognis1002/go-rotten-tomatoes/models"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
+
+func goDotEnvVariable(key string) string {
+	// load .env file
+	err := godotenv.Load(".env")
+  
+	if err != nil {
+	  log.Fatalf("Error loading .env file")
+	}
+  
+	return os.Getenv(key)
+  }
 
 func databaseInit() (db *gorm.DB) {
 	db, err := gorm.Open(sqlite.Open("test.db"), &gorm.Config{})
@@ -88,6 +101,11 @@ func checkAmcTheatreNowPlaying() {
 }
 
 func main() {
+	TWILIO_ACCOUNT_SID := goDotEnvVariable("TWILIO_ACCOUNT_SID")
+	TWILIO_AUTH_TOKEN := goDotEnvVariable("TWILIO_AUTH_TOKEN")
+	fmt.Printf("TWILIO_ACCOUNT_SID: %s", TWILIO_ACCOUNT_SID)
+	fmt.Printf("TWILIO_AUTH_TOKEN: %s", TWILIO_AUTH_TOKEN)
+
 	db := databaseInit()
 
 	// Migrate the schema
